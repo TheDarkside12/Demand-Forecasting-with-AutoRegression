@@ -1,1 +1,50 @@
-READ ME
+import pandas as pd
+import numpy as np
+from statsmodels.tsa.ar_model import AutoReg
+
+
+def ar_prediction(file_path, pred_date):
+    # Load data
+    df = pd.read_csv(file_path, parse_dates=True)
+    df['date'] = pd.to_datetime(df['date'], format="%d-%m-%Y")
+    df.set_index("date", inplace=True)
+    df = df.dropna()
+    data = df.values
+
+    # Split data into train and test sets
+    train_data = data[:len(data) - 7]
+    test_data = data[len(data) - 7:]
+
+    # Fit the AutoReg model using AIC to determine number of lags
+    model = AutoReg(train_data, lags=10, trend='c')
+    results = model.fit()
+
+    # Make predictions on test data
+    predictions = results.predict(start=len(train_data), end=len(data) - 1, dynamic=False)
+
+    # Generate a DatetimeIndex object for future dates to be predicted
+    pred_dates = pd.date_range(start=df.index[-1] + pd.Timedelta(days=1), periods=180, freq='D')
+
+    # Make predictions for the next week and add an index with dates
+    future_predictions = results.predict(start=len(data), end=len(data) + 179, dynamic=False)
+    future_predictions_df = pd.DataFrame(future_predictions, columns=['price'], index=pred_dates)
+
+    # Concatenate predicted values and dates to the copied dataframe
+    df_copy = df.copy()
+    df_copy = pd.concat([df_copy, future_predictions_df])
+
+    # Calculate accuracy of the model
+    rmse = np.sqrt(np.mean((future_predictions - test_data) ** 2))
+    accuracy = round(100 - ((rmse / test_data.mean()) * 100))
+
+    # Print the price of a specific date in the copied dataframe
+    date = pd.Timestamp(pred_date)
+    price = df_copy.loc[date, 'price']
+
+    return accuracy, price
+
+
+if name == 'main':
+    accuracy, price = ar_prediction('Pal-Car.csv', '2023-04-20')
+    print("Accuracy: {}%".format(accuracy))
+    print("Price : {}".format(price))
